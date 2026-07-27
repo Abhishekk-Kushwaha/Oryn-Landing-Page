@@ -3,7 +3,7 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { LandingPage } from "./components/LandingPage";
 import { FeaturesPage } from "./components/FeaturesPage";
 import { PricingPage } from "./components/PricingPage";
-import { AuthGate } from "./components/ui/AuthGate";
+import { AuthGate, OAUTH_PENDING_KEY } from "./components/ui/AuthGate";
 import { VALID_VIEWS, type ViewType } from "./hooks/useAppRouter";
 import { handleRazorpayCheckout } from "./lib/razorpay";
 import { ThankYouPage } from "./components/ThankYouPage";
@@ -20,6 +20,18 @@ function hasPendingAuthParams() {
     window.location.search.includes("code=") ||
     window.location.hash.includes("access_token=")
   );
+}
+
+// Reading the URL alone is not enough: supabase-js strips `?code=` asynchronously and
+// can win the race against our first render, which would skip the history
+// normalisation below and leave the Google account chooser directly behind the demo.
+// OAUTH_PENDING_KEY is set by AuthGate before it hands off to Google.
+function isReturningFromOAuth() {
+  try {
+    return sessionStorage.getItem(OAUTH_PENDING_KEY) === "1" || hasPendingAuthParams();
+  } catch {
+    return hasPendingAuthParams();
+  }
 }
 
 export default function App() {
@@ -151,21 +163,30 @@ export default function App() {
 
   // Captured on first render, before supabase-js gets a chance to strip the params
   // itself. Checking inside the effect below would miss a successful exchange.
-  const isOAuthReturnRef = useRef(hasPendingAuthParams());
+  const isOAuthReturnRef = useRef(isReturningFromOAuth());
   const didNormalizeUrlRef = useRef(false);
 
   // Once supabase has consumed the OAuth credentials, strip them from the URL and
-  // lay down the history entries the mount effect deliberately skipped.
+  // replace the entry we came back on. Google's account chooser sits directly behind
+  // us in history and belongs to another origin, so it cannot be removed — the fix is
+  // to make sure at least one of our own pages is beneath the demo, otherwise the
+  // first back press leaves the site and shows the account picker again.
   useEffect(() => {
     if (isAuthResolving) return;
     if (!isOAuthReturnRef.current || didNormalizeUrlRef.current) return;
     didNormalizeUrlRef.current = true;
 
+    try {
+      sessionStorage.removeItem(OAUTH_PENDING_KEY);
+    } catch {
+      /* private mode — nothing to clear */
+    }
+
     if (showApp) {
       window.history.replaceState({ orynLandingEntry: true }, "", "/pricing");
       window.history.pushState({ orynDemoEntry: true }, "", "/demo#today");
     } else {
-      window.history.replaceState(window.history.state, "", window.location.pathname);
+      window.history.replaceState({ orynLandingEntry: true }, "", window.location.pathname);
     }
   }, [isAuthResolving, showApp]);
 

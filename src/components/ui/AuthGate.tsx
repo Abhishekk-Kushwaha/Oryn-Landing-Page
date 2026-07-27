@@ -10,6 +10,10 @@ import { motion, AnimatePresence } from 'motion/react';
 ──────────────────────────────────────────────────────────────────────────────── */
 export const DEMO_ENTRY_URL = '/demo';
 
+/* Set immediately before redirecting to Google, read once we come back. Survives the
+   round trip independently of the URL, which supabase-js rewrites asynchronously. */
+export const OAUTH_PENDING_KEY = 'oryn_oauth_pending';
+
 /* ─── Embedded browser detection ───────────────────────────────────────────────
    Google blocks OAuth inside embedded webviews (disallowed_useragent), and most
    of our paid traffic arrives through the Instagram in-app browser. Detect it so
@@ -116,6 +120,15 @@ export function AuthGate({ redirectPath = DEMO_ENTRY_URL }: { redirectPath?: str
         setIsGoogleLoading(true);
         setError(null);
         try {
+            // Flag the round trip before we leave. App.tsx needs to know we came back
+            // from Google even if supabase-js has already stripped ?code= from the URL,
+            // so it can put one of our own pages behind the demo in history.
+            try {
+                sessionStorage.setItem(OAUTH_PENDING_KEY, '1');
+            } catch {
+                /* private mode — fall back to URL detection */
+            }
+
             const { error: oauthError } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: { redirectTo: window.location.origin + redirectPath },
@@ -124,6 +137,12 @@ export function AuthGate({ redirectPath = DEMO_ENTRY_URL }: { redirectPath?: str
             // On success the browser navigates away to Google; the session is picked
             // up by the onAuthStateChange listener in App.tsx when we come back.
         } catch (err: unknown) {
+            // We never left, so the flag would be a lie on the next load.
+            try {
+                sessionStorage.removeItem(OAUTH_PENDING_KEY);
+            } catch {
+                /* private mode */
+            }
             setError(err instanceof Error && err.message ? err.message : 'Could not start Google sign-in.');
             setIsGoogleLoading(false);
         }
