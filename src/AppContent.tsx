@@ -1583,17 +1583,23 @@ export default function App({ onExit }: { onExit?: () => void }) {
           </div>
         )}
 
+        {/* Demo hint presents as a bottom sheet, matching how TaskPreviewCard appears on
+            tap. Fixed rather than absolute so it stays put instead of scrolling with the
+            view, and pb-24 clears the mobile tab bar (main carries the same pb-24). */}
         <AnimatePresence>
           {onExit && showDemoInstruction && view === 'today' && (
-            <div className="absolute inset-0 z-[200] flex items-center justify-center px-4 pointer-events-none">
-              <motion.div
-                initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            <motion.div
+              key="demo-hint"
+              initial={{ opacity: 0, y: 28 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed inset-x-0 bottom-0 z-[200] flex items-end justify-center px-4 pb-24 md:pb-6 pointer-events-none"
+            >
+              <div
                 className="pointer-events-auto relative overflow-hidden backdrop-blur-3xl border p-5 flex items-start gap-4 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.15)] rounded-[24px] w-full max-w-[380px]"
-                style={{ 
-                  background: "var(--surface-modal)", 
+                style={{
+                  background: "var(--surface-modal)",
                   borderColor: "var(--surface-border)"
                 }}
               >
@@ -1624,8 +1630,8 @@ export default function App({ onExit }: { onExit?: () => void }) {
                 >
                   <X className="w-4 h-4 opacity-60 transition-opacity hover:opacity-100" style={{ color: "var(--text-primary)" }} strokeWidth={2.5} />
                 </button>
-              </motion.div>
-            </div>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
 
