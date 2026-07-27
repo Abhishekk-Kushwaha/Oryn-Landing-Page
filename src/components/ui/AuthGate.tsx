@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, KeyRound, Loader2, Mail } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, KeyRound, Loader2, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 /* ─── Where Google sends the user back to ───────────────────────────────────────
@@ -218,10 +218,6 @@ export function AuthGate({ redirectPath = DEMO_ENTRY_URL }: { redirectPath?: str
 
     /* ── Shared inner content ── */
     const heading = step === 'code' ? 'Check your email' : 'Start exploring Oryn';
-    const subheading =
-        step === 'code'
-            ? null
-            : 'Create your account to open the demo. Takes one tap — no card, no payment.';
 
     // Rendered once per layout (desktop card + mobile sheet). The step switcher is a
     // plain keyed motion.div rather than AnimatePresence: two presence trees rendering
@@ -409,11 +405,6 @@ export function AuthGate({ redirectPath = DEMO_ENTRY_URL }: { redirectPath?: str
                     </div>
                 )}
             </motion.div>
-
-            <div className="mt-6 flex items-center justify-center gap-1.5 text-[11.5px] font-medium text-emerald-600/90">
-                <CheckCircle2 className="h-3 w-3" />
-                <span>Free to explore — no card required</span>
-            </div>
         </>
     );
 
@@ -443,11 +434,6 @@ export function AuthGate({ redirectPath = DEMO_ENTRY_URL }: { redirectPath?: str
                         <h1 className="text-[26px] font-bold leading-tight tracking-[-0.04em]" style={{ color: 'var(--text-primary)' }}>
                             {heading}
                         </h1>
-                        {subheading && (
-                            <p className="mt-3 px-2 text-[14px] font-medium leading-6" style={{ color: 'var(--text-secondary)' }}>
-                                {subheading}
-                            </p>
-                        )}
                         <div className="my-6 h-px w-full" style={{ background: 'var(--divider)' }} />
                         {renderContent('d')}
                     </div>
@@ -482,11 +468,6 @@ export function AuthGate({ redirectPath = DEMO_ENTRY_URL }: { redirectPath?: str
                                 <h1 className="text-[26px] font-bold leading-tight tracking-[-0.04em]" style={{ color: 'var(--text-primary)' }}>
                                     {heading}
                                 </h1>
-                                {subheading && (
-                                    <p className="mt-3 text-[14px] font-medium leading-6" style={{ color: 'var(--text-secondary)' }}>
-                                        {subheading}
-                                    </p>
-                                )}
                             </motion.div>
                         </motion.div>
                     )}
