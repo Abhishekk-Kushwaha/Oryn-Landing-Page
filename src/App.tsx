@@ -34,6 +34,29 @@ function isReturningFromOAuth() {
   }
 }
 
+const LANDING_STATE = { orynLandingEntry: true };
+const DEMO_STATE = { orynDemoEntry: true };
+
+/**
+ * Rebuilds history as `/` → `/pricing` → `/demo#today`, so back walks
+ * demo → pricing → landing and only leaves the site from the landing page.
+ *
+ * Used for cold entries — a deep link straight to /demo, or the return from Google —
+ * where the landing page was never in history to begin with. Without this, the entry
+ * behind the demo belongs to another origin (Google's account chooser, or the ad).
+ */
+function buildDemoFunnelHistory() {
+  window.history.replaceState(LANDING_STATE, "", "/");
+  window.history.pushState(LANDING_STATE, "", "/pricing");
+  window.history.pushState(DEMO_STATE, "", "/demo#today");
+}
+
+/** Puts `/` beneath a cold landing route so back returns to the landing page. */
+function ensureLandingBeneath(path: string) {
+  window.history.replaceState(LANDING_STATE, "", "/");
+  window.history.pushState(LANDING_STATE, "", path);
+}
+
 export default function App() {
   const [showApp, setShowApp] = useState(() => {
     const path = window.location.pathname.replace(/\/$/, "");
@@ -144,15 +167,19 @@ export default function App() {
     const initialHash = window.location.hash.replace("#", "");
     if (isDemoUrl(initialPath, window.location.hash)) {
       // Rewriting the URL here would strip a pending OAuth `?code=` before
-      // supabase-js has exchanged it. Leave it alone; the effect below restores
+      // supabase-js has exchanged it. Leave it alone; the effect below rebuilds
       // these history entries once the session has resolved.
       if (!window.history.state?.orynDemoEntry && !hasPendingAuthParams()) {
-        const landingUrl = "/pricing";
-        const appUrl = `/demo#${VALID_VIEWS.includes(initialHash as ViewType) ? initialHash : "today"}`;
-        window.history.replaceState({ orynLandingEntry: true }, "", landingUrl);
-        window.history.pushState({ orynDemoEntry: true }, "", appUrl);
+        buildDemoFunnelHistory();
       }
       setShowApp(true);
+    } else {
+      // Cold load on a landing route other than "/" — a deep link or an ad click.
+      // Put the landing page beneath it so back stays on the site.
+      const cleanPath = initialPath.replace(/\/$/, "") || "/";
+      if (cleanPath !== "/" && !window.history.state?.orynLandingEntry) {
+        ensureLandingBeneath(cleanPath);
+      }
     }
 
     return () => {
@@ -183,19 +210,24 @@ export default function App() {
     }
 
     if (showApp) {
-      window.history.replaceState({ orynLandingEntry: true }, "", "/pricing");
-      window.history.pushState({ orynDemoEntry: true }, "", "/demo#today");
+      buildDemoFunnelHistory();
     } else {
-      window.history.replaceState({ orynLandingEntry: true }, "", window.location.pathname);
+      ensureLandingBeneath(window.location.pathname.replace(/\/$/, "") || "/");
     }
   }, [isAuthResolving, showApp]);
 
   const handleEnterApp = () => {
     savedScrollPositionRef.current = window.scrollY || document.documentElement.scrollTop || 0;
     setShowApp(true);
-    // Replace the current history entry (e.g. '/') with '/pricing' so the back button traps them in the pricing funnel
-    window.history.replaceState({ orynLandingEntry: true }, "", "/pricing");
-    window.history.pushState({ orynDemoEntry: true }, "", "/demo#today");
+
+    // Stack on top of wherever they are rather than overwriting it, so back walks
+    // demo → pricing → landing. Replacing the current entry here used to delete the
+    // landing page from history, which left back with nowhere on-site to go.
+    const cleanPath = window.location.pathname.replace(/\/$/, "") || "/";
+    if (cleanPath !== "/pricing") {
+      window.history.pushState(LANDING_STATE, "", "/pricing");
+    }
+    window.history.pushState(DEMO_STATE, "", "/demo#today");
   };
 
   const handleLandingNavigate = (path: string) => {
@@ -317,10 +349,18 @@ export default function App() {
   // their identity for the whole visit — checkout attaches the payment to it, and
   // re-entering the demo has to be free. Signing out here forced a fresh login on
   // every demo click and again at pricing.
+  // Leaving the demo must NOT sign the user out — see the gate. It also must not push a
+  // new entry: /pricing already sits directly beneath the demo, so stepping back onto it
+  // keeps the stack clean. Pushing instead would leave the demo entry above us, and the
+  // next back press would drop the user straight back into it.
   const handleExitApp = () => {
+    if (window.history.state?.orynDemoEntry) {
+      window.history.back();
+      return;
+    }
     setShowApp(false);
     setLandingPath("/pricing");
-    window.history.pushState({ orynLandingEntry: true }, "", "/pricing");
+    window.history.replaceState(LANDING_STATE, "", "/pricing");
   };
 
   console.log("[App] rendering state: showApp =", showApp, "landingPath =", landingPath);
