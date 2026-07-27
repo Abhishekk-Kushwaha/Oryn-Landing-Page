@@ -3,8 +3,12 @@ import { supabase } from '../lib/supabase';
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, KeyRound, Loader2, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-/* ─── Where Google sends the user back to ──────────────────────────────────── */
-export const DEMO_ENTRY_URL = '/demo#today';
+/* ─── Where Google sends the user back to ───────────────────────────────────────
+   Must NOT contain a fragment. Supabase appends the PKCE `?code=` to this URL, and
+   a fragment can swallow it into the hash where supabase-js will never find it.
+   /demo alone is enough — the router defaults the view to today.
+──────────────────────────────────────────────────────────────────────────────── */
+export const DEMO_ENTRY_URL = '/demo';
 
 /* ─── Embedded browser detection ───────────────────────────────────────────────
    Google blocks OAuth inside embedded webviews (disallowed_useragent), and most

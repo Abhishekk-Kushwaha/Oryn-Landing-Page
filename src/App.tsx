@@ -13,6 +13,15 @@ import { PolicyPage } from "./components/PolicyPage";
 
 const AppContent = lazy(() => import("./AppContent"));
 
+// True while an OAuth redirect's credentials are still sitting in the URL waiting
+// to be exchanged. Nothing may rewrite the URL until this goes false.
+function hasPendingAuthParams() {
+  return (
+    window.location.search.includes("code=") ||
+    window.location.hash.includes("access_token=")
+  );
+}
+
 export default function App() {
   const [showApp, setShowApp] = useState(() => {
     const path = window.location.pathname.replace(/\/$/, "");
@@ -55,9 +64,7 @@ export default function App() {
     // Returning from Google leaves ?code= (PKCE) or #access_token= in the URL, which
     // supabase-js exchanges asynchronously. Stay in the resolving state until that
     // lands, otherwise we flash the gate at someone who just signed in.
-    const returningFromOAuth =
-      window.location.search.includes("code=") ||
-      window.location.hash.includes("access_token=");
+    const returningFromOAuth = hasPendingAuthParams();
 
     supabase.auth.getSession().then(({ data }) => {
       if (cancelled) return;
@@ -124,7 +131,10 @@ export default function App() {
     const initialPath = window.location.pathname;
     const initialHash = window.location.hash.replace("#", "");
     if (isDemoUrl(initialPath, window.location.hash)) {
-      if (!window.history.state?.orynDemoEntry) {
+      // Rewriting the URL here would strip a pending OAuth `?code=` before
+      // supabase-js has exchanged it. Leave it alone; the effect below restores
+      // these history entries once the session has resolved.
+      if (!window.history.state?.orynDemoEntry && !hasPendingAuthParams()) {
         const landingUrl = "/pricing";
         const appUrl = `/demo#${VALID_VIEWS.includes(initialHash as ViewType) ? initialHash : "today"}`;
         window.history.replaceState({ orynLandingEntry: true }, "", landingUrl);
@@ -138,6 +148,26 @@ export default function App() {
       window.removeEventListener("hashchange", handleNavigation);
     };
   }, []);
+
+  // Captured on first render, before supabase-js gets a chance to strip the params
+  // itself. Checking inside the effect below would miss a successful exchange.
+  const isOAuthReturnRef = useRef(hasPendingAuthParams());
+  const didNormalizeUrlRef = useRef(false);
+
+  // Once supabase has consumed the OAuth credentials, strip them from the URL and
+  // lay down the history entries the mount effect deliberately skipped.
+  useEffect(() => {
+    if (isAuthResolving) return;
+    if (!isOAuthReturnRef.current || didNormalizeUrlRef.current) return;
+    didNormalizeUrlRef.current = true;
+
+    if (showApp) {
+      window.history.replaceState({ orynLandingEntry: true }, "", "/pricing");
+      window.history.pushState({ orynDemoEntry: true }, "", "/demo#today");
+    } else {
+      window.history.replaceState(window.history.state, "", window.location.pathname);
+    }
+  }, [isAuthResolving, showApp]);
 
   const handleEnterApp = () => {
     savedScrollPositionRef.current = window.scrollY || document.documentElement.scrollTop || 0;
