@@ -292,17 +292,14 @@ export default function App() {
     startCheckout(plan, session.user.id, session.user.email || '');
   }, [isAuthResolving, session]);
 
+  // Leaving the demo must NOT sign the user out. The account created at the gate is
+  // their identity for the whole visit — checkout attaches the payment to it, and
+  // re-entering the demo has to be free. Signing out here forced a fresh login on
+  // every demo click and again at pricing.
   const handleExitApp = () => {
-    document.cookie = "oryn_customer_v1=; Max-Age=0; Path=/";
-    supabase.auth.signOut().then(() => {
-      setShowApp(false);
-      setLandingPath("/pricing");
-      window.history.pushState(
-        { orynLandingEntry: true },
-        "",
-        "/pricing",
-      );
-    });
+    setShowApp(false);
+    setLandingPath("/pricing");
+    window.history.pushState({ orynLandingEntry: true }, "", "/pricing");
   };
 
   console.log("[App] rendering state: showApp =", showApp, "landingPath =", landingPath);
