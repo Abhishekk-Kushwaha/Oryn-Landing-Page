@@ -14,6 +14,12 @@ export const DEMO_ENTRY_URL = '/demo';
    round trip independently of the URL, which supabase-js rewrites asynchronously. */
 export const OAUTH_PENDING_KEY = 'oryn_oauth_pending';
 
+/* Supabase's email OTP length is configurable (Auth → Providers → Email). Accept the
+   whole supported range rather than assuming 6 — a hard 6-digit cap silently truncates
+   a longer code, and the trimmed value then fails as an invalid token. */
+const OTP_MIN_LENGTH = 6;
+const OTP_MAX_LENGTH = 10;
+
 /* ─── Embedded browser detection ───────────────────────────────────────────────
    Google blocks OAuth inside embedded webviews (disallowed_useragent), and most
    of our paid traffic arrives through the Instagram in-app browser. Detect it so
@@ -182,25 +188,36 @@ export function AuthGate({ redirectPath = DEMO_ENTRY_URL }: { redirectPath?: str
 
     const handleVerifyCode = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (otpCode.length < 6) {
-            setError('Enter the 6-digit code from your email.');
+        if (otpCode.length < OTP_MIN_LENGTH) {
+            setError('Enter the code from your email.');
             return;
         }
 
         setIsCodeLoading(true);
         setError(null);
-        try {
-            const { error: verifyError } = await supabase.auth.verifyOtp({
-                email,
-                token: otpCode.trim(),
-                type: 'email',
-            });
-            if (verifyError) throw verifyError;
-            // Session established — App.tsx reacts via onAuthStateChange.
-        } catch (err: unknown) {
-            setError(err instanceof Error && err.message ? err.message : 'That code was not valid.');
-            setIsCodeLoading(false);
+
+        // A brand-new address gets a signup token, a returning one gets a magic-link
+        // token, and the client cannot tell which in advance. Verifying with the wrong
+        // type fails as "Token has expired or is invalid", so try both before giving up.
+        const token = otpCode.trim();
+        const attempts: Array<'email' | 'signup'> = ['email', 'signup'];
+        let lastError: unknown = null;
+
+        for (const type of attempts) {
+            const { error: verifyError } = await supabase.auth.verifyOtp({ email, token, type });
+            if (!verifyError) {
+                // Session established — App.tsx reacts via onAuthStateChange.
+                return;
+            }
+            lastError = verifyError;
         }
+
+        setError(
+            lastError instanceof Error && lastError.message
+                ? lastError.message
+                : 'That code was not valid.',
+        );
+        setIsCodeLoading(false);
     };
 
     const handleResend = async () => {
@@ -247,7 +264,7 @@ export function AuthGate({ redirectPath = DEMO_ENTRY_URL }: { redirectPath?: str
                         </div>
 
                         <p className="mb-1 text-[13px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                            We sent a 6-digit code to
+                            We sent a code to
                         </p>
                         <p className="mb-6 text-[14px] font-medium" style={{ color: 'var(--text-secondary)' }}>
                             {email}
@@ -258,11 +275,11 @@ export function AuthGate({ redirectPath = DEMO_ENTRY_URL }: { redirectPath?: str
                                 type="text"
                                 inputMode="numeric"
                                 autoComplete="one-time-code"
-                                maxLength={6}
+                                maxLength={OTP_MAX_LENGTH}
                                 value={otpCode}
-                                onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
+                                onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, '').slice(0, OTP_MAX_LENGTH))}
                                 className={formInputClass + ' text-center text-[18px] font-bold tracking-[0.3em]'}
-                                placeholder="000000"
+                                placeholder="Enter code"
                                 required
                                 autoFocus
                             />
